@@ -1,0 +1,6 @@
+{
+  "name": "Quicks",
+  "description": "Minimalist study app with daily tasks, AI recap, calendar schedule, focus lock-in timer with lofi beats, smart notes, and chat with Quicker AI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
