@@ -1,39 +1,109 @@
 package com.example.audio
 
 import android.media.AudioAttributes
-import android.media.AudioFormat
-import android.media.AudioTrack
+import android.media.MediaPlayer
+import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import java.util.Random
-import kotlin.math.sin
 
 data class LofiTrack(
     val id: Int,
     val title: String,
-    val style: String,
-    val bpm: Int,
-    val baseFrequencies: List<Float>
+    val artist: String,
+    val genre: String,
+    val streamUrl: String
 )
 
 class LofiAudioEngine {
 
     val tracks: List<LofiTrack> = listOf(
-        LofiTrack(1, "Midnight Tokyo Rain", "Rain & Warm Maj7", 68, listOf(349.23f, 440.0f, 523.25f, 659.25f)), // Fmaj7
-        LofiTrack(2, "Coffee Shop Study", "Mellow Jazz Chords", 72, listOf(261.63f, 329.63f, 392.00f, 493.88f)), // Cmaj7
-        LofiTrack(3, "Deep Lock In Beats", "Chill Sub-Bass & Minor", 65, listOf(220.0f, 261.63f, 329.63f, 392.00f)), // Am7
-        LofiTrack(4, "Late Night Library", "Soft Electric Rhodes", 60, listOf(293.66f, 349.23f, 440.0f, 523.25f)), // Dm7
-        LofiTrack(5, "Cosmic Lo-Fi", "Airy Ethereal Drift", 75, listOf(392.00f, 493.88f, 587.33f, 698.46f)), // G7
-        LofiTrack(6, "Analog Tape Dreams", "Vintage Warm Flutter", 64, listOf(329.63f, 392.00f, 493.88f, 587.33f)), // Em7
-        LofiTrack(7, "Study Session #7", "Classic Lo-Fi Groove", 70, listOf(261.63f, 329.63f, 392.00f, 440.0f)), // C6
-        LofiTrack(8, "Raindrop Melodies", "Soothing Pentatonic Bells", 66, listOf(392.0f, 440.0f, 523.25f, 659.25f)),
-        LofiTrack(9, "Vinyl Warmth Lounge", "Cozy Fireplace Crackle", 74, listOf(349.23f, 392.0f, 440.0f, 523.25f)),
-        LofiTrack(10, "Zen Focus Drone", "Deep Alpha Harmonics", 58, listOf(196.0f, 293.66f, 392.0f, 587.33f))
+        LofiTrack(
+            id = 1,
+            title = "Tokyo Rain Sessions",
+            artist = "Lofi Cafe Stream",
+            genre = "Chill Lo-Fi & Rain",
+            streamUrl = "https://radio.loficafe.net/listen/chilling/radio.mp3"
+        ),
+        LofiTrack(
+            id = 2,
+            title = "Midnight Study Beats",
+            artist = "Lo-Fi Radio Online",
+            genre = "Warm Vinyl & Rhodes",
+            streamUrl = "https://live.lofiradio.ru/lofi_mp3_128"
+        ),
+        LofiTrack(
+            id = 3,
+            title = "Chillhop Instrumental",
+            artist = "I Love Chillhop",
+            genre = "Smooth Study Beats",
+            streamUrl = "https://streams.ilovemusic.de/iloveradio17.mp3"
+        ),
+        LofiTrack(
+            id = 4,
+            title = "Groove Salad Ambient",
+            artist = "SomaFM Ambient Focus",
+            genre = "Deep Ambient Study",
+            streamUrl = "https://ice1.somafm.com/groovesalad-128-mp3"
+        ),
+        LofiTrack(
+            id = 5,
+            title = "Library Tape Memories",
+            artist = "Zenith Collective",
+            genre = "Mellow Piano Lo-Fi",
+            streamUrl = "https://stream.zeno.fm/f3wvbbqmdg8uv"
+        ),
+        LofiTrack(
+            id = 6,
+            title = "Night Owl Acoustic",
+            artist = "Broke For Free (CC-BY)",
+            genre = "Acoustic Chill Beats",
+            streamUrl = "https://files.freemusicarchive.org/storage-freemusicarchive-org/music/WFMU/Broke_For_Free/Directionless_EP/Broke_For_Free_-_01_-_Night_Owl.mp3"
+        ),
+        LofiTrack(
+            id = 7,
+            title = "Drone Zone Deep Space",
+            artist = "SomaFM Atmospheric",
+            genre = "Zero-Distraction Flow",
+            streamUrl = "https://ice1.somafm.com/dronezone-128-mp3"
+        ),
+        LofiTrack(
+            id = 8,
+            title = "Secret Agent Lounge",
+            artist = "SomaFM Downtempo",
+            genre = "Vintage Spy Lo-Fi",
+            streamUrl = "https://ice1.somafm.com/secretagent-128-mp3"
+        ),
+        LofiTrack(
+            id = 9,
+            title = "Lush Neo-Soul Chill",
+            artist = "SomaFM Focus Wave",
+            genre = "Sensuous Vocals & Beats",
+            streamUrl = "https://ice1.somafm.com/lush-128-mp3"
+        ),
+        LofiTrack(
+            id = 10,
+            title = "DefCon Hacker Radio",
+            artist = "SomaFM Cyber Focus",
+            genre = "Chill Synth & Coding",
+            streamUrl = "https://ice1.somafm.com/defcon-128-mp3"
+        ),
+        LofiTrack(
+            id = 11,
+            title = "Suburbs of Goa Chill",
+            artist = "SomaFM World Downtempo",
+            genre = "Meditative Rhythms",
+            streamUrl = "https://ice1.somafm.com/suburbsofgoa-128-mp3"
+        ),
+        LofiTrack(
+            id = 12,
+            title = "Fluid Beats Lo-Fi",
+            artist = "Future Wave Audio",
+            genre = "Glitch & Chillhop",
+            streamUrl = "https://ice1.somafm.com/fluid-128-mp3"
+        )
     )
 
     private val _currentTrackIndex = MutableStateFlow(0)
@@ -42,24 +112,33 @@ class LofiAudioEngine {
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying: StateFlow<Boolean> = _isPlaying
 
-    private val _volume = MutableStateFlow(0.7f)
+    private val _isBuffering = MutableStateFlow(false)
+    val isBuffering: StateFlow<Boolean> = _isBuffering
+
+    private val _volume = MutableStateFlow(0.8f)
     val volume: StateFlow<Float> = _volume
 
-    private var audioTrack: AudioTrack? = null
-    private var synthesisJob: Job? = null
-    private val scope = CoroutineScope(Dispatchers.Default)
+    private var mediaPlayer: MediaPlayer? = null
+    private val scope = CoroutineScope(Dispatchers.IO)
 
     fun getCurrentTrack(): LofiTrack = tracks[_currentTrackIndex.value]
 
     fun play() {
-        if (_isPlaying.value) return
+        if (_isPlaying.value && mediaPlayer?.isPlaying == true) return
         _isPlaying.value = true
-        startSynthesizer()
+        startStream(getCurrentTrack().streamUrl)
     }
 
     fun pause() {
         _isPlaying.value = false
-        stopSynthesizer()
+        _isBuffering.value = false
+        try {
+            if (mediaPlayer?.isPlaying == true) {
+                mediaPlayer?.pause()
+            }
+        } catch (e: Exception) {
+            Log.e("LofiAudioEngine", "Error pausing player", e)
+        }
     }
 
     fun togglePlayPause() {
@@ -69,16 +148,14 @@ class LofiAudioEngine {
     fun nextTrack() {
         _currentTrackIndex.value = (_currentTrackIndex.value + 1) % tracks.size
         if (_isPlaying.value) {
-            stopSynthesizer()
-            startSynthesizer()
+            startStream(getCurrentTrack().streamUrl)
         }
     }
 
     fun previousTrack() {
         _currentTrackIndex.value = if (_currentTrackIndex.value - 1 < 0) tracks.size - 1 else _currentTrackIndex.value - 1
         if (_isPlaying.value) {
-            stopSynthesizer()
-            startSynthesizer()
+            startStream(getCurrentTrack().streamUrl)
         }
     }
 
@@ -86,110 +163,70 @@ class LofiAudioEngine {
         val next = (tracks.indices).filter { it != _currentTrackIndex.value }.randomOrNull() ?: 0
         _currentTrackIndex.value = next
         if (_isPlaying.value) {
-            stopSynthesizer()
-            startSynthesizer()
+            startStream(getCurrentTrack().streamUrl)
         }
     }
 
     fun setVolume(vol: Float) {
         val clamped = vol.coerceIn(0f, 1f)
         _volume.value = clamped
-        audioTrack?.setVolume(clamped)
+        try {
+            mediaPlayer?.setVolume(clamped, clamped)
+        } catch (e: Exception) {
+            Log.e("LofiAudioEngine", "Error setting volume", e)
+        }
     }
 
-    private fun startSynthesizer() {
-        synthesisJob?.cancel()
-        synthesisJob = scope.launch {
-            val sampleRate = 22050
-            val minBufferSize = AudioTrack.getMinBufferSize(
-                sampleRate,
-                AudioFormat.CHANNEL_OUT_MONO,
-                AudioFormat.ENCODING_PCM_16BIT
-            )
-            val bufferSize = maxOf(minBufferSize, 4096)
-
-            val track = AudioTrack.Builder()
-                .setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .build()
-                )
-                .setAudioFormat(
-                    AudioFormat.Builder()
-                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                        .setSampleRate(sampleRate)
-                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                        .build()
-                )
-                .setBufferSizeInBytes(bufferSize)
-                .setTransferMode(AudioTrack.MODE_STREAM)
-                .build()
-
-            audioTrack = track
-            track.setVolume(_volume.value)
-            track.play()
-
-            val buffer = ShortArray(1024)
-            var sampleCounter = 0L
-            val currentLofi = getCurrentTrack()
-            val chords = currentLofi.baseFrequencies
-            val random = Random()
-
+    private fun startStream(url: String) {
+        scope.launch {
             try {
-                while (isActive && _isPlaying.value) {
-                    val seconds = sampleCounter.toDouble() / sampleRate
-                    // Chord progression changes every 3.5 seconds
-                    val chordStep = ((seconds / 3.5).toInt()) % chords.size
-                    val chordFreq = chords[chordStep]
+                _isBuffering.value = true
+                mediaPlayer?.release()
+                mediaPlayer = null
 
-                    for (i in buffer.indices) {
-                        val t = (sampleCounter + i).toDouble() / sampleRate
-
-                        // 1. Soft Warm Rhodes Tone (fundamental + 2nd + 3rd harmonic)
-                        val fundamental = sin(2.0 * Math.PI * chordFreq * t)
-                        val harmonic2 = 0.35 * sin(2.0 * Math.PI * (chordFreq * 1.5) * t)
-                        val harmonic3 = 0.20 * sin(2.0 * Math.PI * (chordFreq * 2.0) * t)
-
-                        // 2. Gentle vibrato / lofi tape flutter (0.5Hz subtle pitch modulation)
-                        val flutter = 1.0 + 0.003 * sin(2.0 * Math.PI * 0.7 * t)
-
-                        // 3. Gentle Vinyl Crackle / Rain ambient noise
-                        val rainCrackle = if (random.nextFloat() > 0.985f) (random.nextFloat() - 0.5f) * 0.15f else 0.0f
-                        val ambientHiss = (random.nextFloat() - 0.5f) * 0.015f
-
-                        // Combine and apply soft envelope
-                        val combined = ((fundamental + harmonic2 + harmonic3) * 0.45 * flutter) + rainCrackle + ambientHiss
-
-                        // Scale to 16-bit PCM Short
-                        val sampleVal = (combined.coerceIn(-1.0, 1.0) * Short.MAX_VALUE).toInt().toShort()
-                        buffer[i] = sampleVal
+                val player = MediaPlayer().apply {
+                    setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .build()
+                    )
+                    setDataSource(url)
+                    val vol = _volume.value
+                    setVolume(vol, vol)
+                    setOnPreparedListener { mp ->
+                        _isBuffering.value = false
+                        if (_isPlaying.value) {
+                            mp.start()
+                        }
                     }
-
-                    track.write(buffer, 0, buffer.size)
-                    sampleCounter += buffer.size
+                    setOnCompletionListener {
+                        nextTrack()
+                    }
+                    setOnErrorListener { _, what, extra ->
+                        Log.w("LofiAudioEngine", "MediaPlayer error: $what, $extra")
+                        _isBuffering.value = false
+                        nextTrack()
+                        true
+                    }
+                    prepareAsync()
                 }
-            } catch (_: Exception) {
-            } finally {
-                try {
-                    track.stop()
-                    track.release()
-                } catch (_: Exception) {}
+                mediaPlayer = player
+            } catch (e: Exception) {
+                Log.e("LofiAudioEngine", "Failed to start stream", e)
+                _isBuffering.value = false
             }
         }
     }
 
-    private fun stopSynthesizer() {
-        synthesisJob?.cancel()
-        synthesisJob = null
-        try {
-            audioTrack?.stop()
-            audioTrack?.release()
-            audioTrack = null
-        } catch (_: Exception) {}
-    }
-
     fun release() {
-        stopSynthesizer()
+        try {
+            mediaPlayer?.release()
+            mediaPlayer = null
+            _isPlaying.value = false
+            _isBuffering.value = false
+        } catch (e: Exception) {
+            Log.e("LofiAudioEngine", "Error releasing MediaPlayer", e)
+        }
     }
 }

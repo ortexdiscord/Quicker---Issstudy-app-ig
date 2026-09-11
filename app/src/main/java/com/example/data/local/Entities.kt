@@ -37,7 +37,9 @@ data class NoteItem(
     val imagePath1: String? = null,
     val imagePath2: String? = null,
     val dateString: String,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val extractedOcrText: String? = null,
+    val aiSummary: String? = null
 )
 
 @Entity(tableName = "chat_messages")
@@ -50,12 +52,18 @@ data class ChatMessage(
     val text: String,
     val imageUri: String? = null,
     val timestamp: Long = System.currentTimeMillis(),
-    val messageType: String = "TEXT", // "TEXT", "IMAGE", "QUIZ", "SCHEDULE"
+    val messageType: String = "TEXT", // "TEXT", "IMAGE", "QUIZ", "SCHEDULE", "SOURCE"
     val quizQuestion: String? = null,
     val quizOptions: String? = null, // comma-separated or json
     val quizCorrectIndex: Int = -1,
     val quizSelectedOption: Int = -1,
-    val replyToText: String? = null
+    val replyToText: String? = null,
+    val fileName: String? = null,
+    val fileUri: String? = null,
+    val fileType: String? = null, // "pdf", "image", "doc"
+    val extractedSourceText: String? = null,
+    val isEncrypted: Boolean = true,
+    val aiModeUsed: String? = null // "Smart" or "Expert"
 )
 
 @Entity(tableName = "chat_channels")

@@ -22,6 +22,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.navigation.QuicksBottomPill
 import com.example.ui.navigation.QuicksTopBar
@@ -80,9 +81,11 @@ fun QuicksMainContainer(viewModel: QuicksViewModel) {
     val isGeneratingRecap by viewModel.isGeneratingRecap.collectAsState()
     val channels by viewModel.channels.collectAsState()
     val selectedConvoId by viewModel.selectedConversationId.collectAsState()
+    val activeChatConvoId by viewModel.activeChatConvoId.collectAsState()
     val activeMessages by viewModel.activeMessages.collectAsState()
 
-    val hideBars = currentTab == QuicksNavTab.LOCK_IN && isLockInImmersive
+    val hideTopBar = (currentTab == QuicksNavTab.LOCK_IN && isLockInImmersive) || (currentTab == QuicksNavTab.CHAT)
+    val hideBottomPill = (currentTab == QuicksNavTab.LOCK_IN && isLockInImmersive) || (currentTab == QuicksNavTab.CHAT && activeChatConvoId != null)
 
     Box(
         modifier = Modifier
@@ -93,7 +96,7 @@ fun QuicksMainContainer(viewModel: QuicksViewModel) {
             modifier = Modifier.fillMaxSize(),
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
-                if (!hideBars) {
+                if (!hideTopBar) {
                     QuicksTopBar(
                         userName = userProfile.name,
                         onProfileClick = { viewModel.openSettings() }
@@ -105,8 +108,8 @@ fun QuicksMainContainer(viewModel: QuicksViewModel) {
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(
-                        top = if (hideBars) androidx.compose.ui.unit.Dp.Unspecified else innerPadding.calculateTopPadding(),
-                        bottom = if (hideBars) androidx.compose.ui.unit.Dp.Unspecified else innerPadding.calculateBottomPadding()
+                        top = if (hideTopBar) 0.dp else innerPadding.calculateTopPadding(),
+                        bottom = if (hideBottomPill) 0.dp else innerPadding.calculateBottomPadding()
                     )
             ) {
                 AnimatedContent(
@@ -157,13 +160,17 @@ fun QuicksMainContainer(viewModel: QuicksViewModel) {
                             selectedConvoId = selectedConvoId,
                             messages = activeMessages
                         )
+                        QuicksNavTab.PODCAST -> com.example.ui.screens.podcast.PodcastStudioScreen(
+                            viewModel = viewModel,
+                            podcastManager = viewModel.podcastManager
+                        )
                     }
                 }
             }
         }
 
         // Floating Bottom Pill Navigation Bar
-        if (!hideBars) {
+        if (!hideBottomPill) {
             QuicksBottomPill(
                 currentTab = currentTab,
                 onTabSelect = { viewModel.selectTab(it) },

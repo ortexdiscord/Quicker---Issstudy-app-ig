@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -60,6 +61,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.data.local.NoteItem
+import com.example.ui.components.LiquidGlassCard
+import com.example.ui.components.QuicksRichText
+import com.example.ui.components.rememberLiquidAuroraBrush
 import com.example.ui.viewmodel.QuicksViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -253,9 +257,20 @@ fun NotesScreen(
     if (showAddNoteDialog) {
         AddNoteDialog(
             presets = presets,
+            viewModel = viewModel,
             onDismiss = { showAddNoteDialog = false },
-            onSave = { title, content, subject, preset, img1, img2, date ->
-                viewModel.addNote(title, content, subject, preset, img1, img2, date)
+            onSave = { title, content, subject, preset, img1, img2, date, ocrText, summary ->
+                viewModel.addNote(
+                    title = title,
+                    content = content,
+                    subject = subject,
+                    preset = preset,
+                    imagePath1 = img1,
+                    imagePath2 = img2,
+                    dateString = date,
+                    extractedOcrText = ocrText,
+                    aiSummary = summary
+                )
                 showAddNoteDialog = false
             }
         )
@@ -293,13 +308,14 @@ fun NoteCardItem(
     onForwardToFriend: () -> Unit,
     onDelete: () -> Unit
 ) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(16.dp)),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 2.dp
+    LiquidGlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        backgroundColor = MaterialTheme.colorScheme.surface,
+        backgroundAlpha = 0.88f,
+        borderTopColor = Color(0x60FFFFFF),
+        borderBottomColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f),
+        borderWidth = 1.dp
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             // Header: Subject, Preset, Date
@@ -359,7 +375,7 @@ fun NoteCardItem(
             )
 
             if (note.content.isNotBlank()) {
-                Text(
+                QuicksRichText(
                     text = note.content,
                     fontSize = 13.sp,
                     lineHeight = 18.sp,
@@ -381,7 +397,7 @@ fun NoteCardItem(
                             contentDescription = "Subject photo 1",
                             modifier = Modifier
                                 .weight(1f)
-                                .height(120.dp)
+                                .height(130.dp)
                                 .clip(RoundedCornerShape(10.dp))
                                 .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp)),
                             contentScale = ContentScale.Crop
@@ -393,11 +409,100 @@ fun NoteCardItem(
                             contentDescription = "Subject photo 2",
                             modifier = Modifier
                                 .weight(1f)
-                                .height(120.dp)
+                                .height(130.dp)
                                 .clip(RoundedCornerShape(10.dp))
                                 .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(10.dp)),
                             contentScale = ContentScale.Crop
                         )
+                    }
+                }
+            }
+
+            // AI Summary Card (for recognized image notes)
+            if (!note.aiSummary.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .border(1.dp, Color(0xFF10B981).copy(alpha = 0.4f), RoundedCornerShape(10.dp)),
+                    color = Color(0xFF10B981).copy(alpha = 0.08f)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = Color(0xFF10B981),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "AI Note Summary",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF10B981)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        QuicksRichText(
+                            text = note.aiSummary,
+                            fontSize = 12.5.sp,
+                            lineHeight = 17.sp,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+            }
+
+            // Full Recognized OCR Text with toggle
+            if (!note.extractedOcrText.isNullOrBlank()) {
+                var isOcrExpanded by remember { mutableStateOf(false) }
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f), RoundedCornerShape(10.dp)),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { isOcrExpanded = !isOcrExpanded },
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("📄", fontSize = 13.sp)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Full Recognized Text (OCR)",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            Text(
+                                text = if (isOcrExpanded) "Hide ▲" else "Show Full Text ▼",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        if (isOcrExpanded) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = note.extractedOcrText,
+                                fontSize = 12.sp,
+                                lineHeight = 16.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }
@@ -458,8 +563,9 @@ fun NoteCardItem(
 @Composable
 fun AddNoteDialog(
     presets: List<String>,
+    viewModel: QuicksViewModel,
     onDismiss: () -> Unit,
-    onSave: (title: String, content: String, subject: String, preset: String, img1: String?, img2: String?, date: String) -> Unit
+    onSave: (title: String, content: String, subject: String, preset: String, img1: String?, img2: String?, date: String, ocrText: String?, summary: String?) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
     var content by remember { mutableStateOf("") }
@@ -472,20 +578,47 @@ fun AddNoteDialog(
     var image1Uri by remember { mutableStateOf<String?>(null) }
     var image2Uri by remember { mutableStateOf<String?>(null) }
 
+    var isOcrProcessing by remember { mutableStateOf(false) }
+    var extractedOcrText by remember { mutableStateOf<String?>(null) }
+    var aiSummary by remember { mutableStateOf<String?>(null) }
+
     val photoPickerLauncher1 = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia(),
-        onResult = { uri -> image1Uri = uri?.toString() }
+        onResult = { uri ->
+            image1Uri = uri?.toString()
+            if (uri != null) {
+                isOcrProcessing = true
+                viewModel.processImageForNote(uri) { fullText, summary ->
+                    isOcrProcessing = false
+                    extractedOcrText = fullText
+                    aiSummary = summary
+                    if (title.isBlank() && fullText.isNotBlank()) {
+                        title = fullText.lines().firstOrNull { it.isNotBlank() }?.take(40) ?: "Image Note"
+                    }
+                }
+            }
+        }
     )
 
     val photoPickerLauncher2 = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia(),
-        onResult = { uri -> image2Uri = uri?.toString() }
+        onResult = { uri ->
+            image2Uri = uri?.toString()
+            if (uri != null && extractedOcrText == null) {
+                isOcrProcessing = true
+                viewModel.processImageForNote(uri) { fullText, summary ->
+                    isOcrProcessing = false
+                    extractedOcrText = fullText
+                    aiSummary = summary
+                }
+            }
+        }
     )
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Text("Create Note", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text("Create Note with OCR & AI", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         },
         text = {
             Column(
@@ -511,9 +644,9 @@ fun AddNoteDialog(
                 OutlinedTextField(
                     value = content,
                     onValueChange = { content = it },
-                    label = { Text("Notes Content / Formulas / Summary") },
-                    minLines = 3,
-                    maxLines = 6,
+                    label = { Text("Notes Content / Formulas / Manual Notes") },
+                    minLines = 2,
+                    maxLines = 5,
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -552,7 +685,7 @@ fun AddNoteDialog(
                 }
 
                 // 2 Local Photo Attachment Slots
-                Text("Subject Photos (Stored locally, up to 2):", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text("Image Notes (Full Text OCR + AI Summary):", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -579,7 +712,7 @@ fun AddNoteDialog(
                         } else {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(Icons.Default.AddPhotoAlternate, contentDescription = "Add Photo 1", modifier = Modifier.size(20.dp))
-                                Text("Photo 1", fontSize = 10.sp)
+                                Text("Add Photo 1", fontSize = 10.sp)
                             }
                         }
                     }
@@ -606,7 +739,48 @@ fun AddNoteDialog(
                         } else {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(Icons.Default.AddPhotoAlternate, contentDescription = "Add Photo 2", modifier = Modifier.size(20.dp))
-                                Text("Photo 2", fontSize = 10.sp)
+                                Text("Add Photo 2", fontSize = 10.sp)
+                            }
+                        }
+                    }
+                }
+
+                // OCR Processing / Results Preview in Dialog
+                if (isOcrProcessing) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            androidx.compose.material3.CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Recognizing image text with OCR & AI...", fontSize = 11.sp)
+                        }
+                    }
+                } else if (!extractedOcrText.isNullOrBlank() || !aiSummary.isNullOrBlank()) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFF10B981).copy(alpha = 0.1f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.4f))
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("OCR & Summary Ready!", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF10B981))
+                            }
+                            if (!aiSummary.isNullOrBlank()) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("Summary: ${aiSummary?.take(120)}...", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface)
                             }
                         }
                     }
@@ -617,7 +791,7 @@ fun AddNoteDialog(
             Button(
                 onClick = {
                     if (title.isNotBlank()) {
-                        onSave(title, content, subject, preset, image1Uri, image2Uri, dateString)
+                        onSave(title, content, subject, preset, image1Uri, image2Uri, dateString, extractedOcrText, aiSummary)
                     }
                 },
                 enabled = title.isNotBlank()

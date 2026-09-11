@@ -46,11 +46,11 @@ class UserSessionManager(context: Context) {
     }
 
     private fun loadTheme(): AppThemeMode {
-        val themeStr = prefs.getString("app_theme", AppThemeMode.DARK.name) ?: AppThemeMode.DARK.name
+        val themeStr = prefs.getString("app_theme", AppThemeMode.OLED_BLACK.name) ?: AppThemeMode.OLED_BLACK.name
         return try {
             AppThemeMode.valueOf(themeStr)
         } catch (_: Exception) {
-            AppThemeMode.DARK
+            AppThemeMode.OLED_BLACK
         }
     }
 

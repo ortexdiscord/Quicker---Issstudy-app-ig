@@ -135,6 +135,55 @@ class VoiceCommandHelper(private val context: Context) {
         }
     }
 
+    fun startSpeechToText(onText: (String) -> Unit, onError: (String) -> Unit) {
+        if (!SpeechRecognizer.isRecognitionAvailable(context)) {
+            onError("Speech recognition not supported on this device")
+            return
+        }
+
+        try {
+            speechRecognizer?.destroy()
+            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
+                setRecognitionListener(object : RecognitionListener {
+                    override fun onReadyForSpeech(params: Bundle?) {
+                        _isListening.value = true
+                    }
+                    override fun onBeginningOfSpeech() {}
+                    override fun onRmsChanged(rmsdB: Float) {}
+                    override fun onBufferReceived(buffer: ByteArray?) {}
+                    override fun onEndOfSpeech() {
+                        _isListening.value = false
+                    }
+                    override fun onError(error: Int) {
+                        _isListening.value = false
+                        onError("Speech recognition error: $error")
+                    }
+                    override fun onResults(results: Bundle?) {
+                        _isListening.value = false
+                        val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        val text = matches?.firstOrNull() ?: ""
+                        _lastHeardText.value = text
+                        if (text.isNotBlank()) {
+                            onText(text)
+                        }
+                    }
+                    override fun onPartialResults(partialResults: Bundle?) {}
+                    override fun onEvent(eventType: Int, params: Bundle?) {}
+                })
+            }
+
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+                putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak your question or note...")
+            }
+            speechRecognizer?.startListening(intent)
+        } catch (e: Exception) {
+            _isListening.value = false
+            onError(e.message ?: "Could not start microphone voice input")
+        }
+    }
+
     fun stopListening() {
         _isListening.value = false
         try {

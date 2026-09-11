@@ -86,6 +86,7 @@ fun LockInScreen(
 
     val audioEngine = viewModel.audioEngine
     val isMusicPlaying by audioEngine.isPlaying.collectAsState()
+    val isBuffering by audioEngine.isBuffering.collectAsState()
     val currentTrackIndex by audioEngine.currentTrackIndex.collectAsState()
     val volume by audioEngine.volume.collectAsState()
     val currentTrack = audioEngine.getCurrentTrack()
@@ -324,15 +325,15 @@ fun LockInScreen(
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text(
-                                    text = "${currentTrack.id}/10 • ${currentTrack.title}",
+                                    text = "${currentTrack.id}/${audioEngine.tracks.size} • ${currentTrack.title}",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp,
                                     color = Color.White
                                 )
                                 Text(
-                                    text = "${currentTrack.style} • ${currentTrack.bpm} BPM",
+                                    text = if (isBuffering) "Connecting live stream..." else "${currentTrack.artist} • ${currentTrack.genre}",
                                     fontSize = 11.sp,
-                                    color = Color(0xFFA1A1AA)
+                                    color = if (isBuffering) Color(0xFF60A5FA) else Color(0xFFA1A1AA)
                                 )
                             }
                         }

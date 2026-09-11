@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Timer
@@ -59,6 +60,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.local.TaskItem
+import com.example.ui.components.LiquidGlassCard
 import com.example.ui.theme.UrgentRed
 import com.example.ui.viewmodel.QuicksNavTab
 import com.example.ui.viewmodel.QuicksViewModel
@@ -149,6 +151,73 @@ fun HomeScreen(
                                 Icons.Default.Timer,
                                 contentDescription = "Lock In",
                                 tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Quick Study Cast Studio Callout
+            item {
+                LiquidGlassCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("home_study_cast_banner"),
+                    shape = RoundedCornerShape(18.dp),
+                    backgroundColor = Color(0xFF13131F),
+                    backgroundAlpha = 0.92f,
+                    borderTopColor = Color(0x70FFFFFF),
+                    borderBottomColor = Color(0x20FFFFFF),
+                    onClick = { onNavigateTab(QuicksNavTab.PODCAST) }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(18.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "🎙️ Study Cast Studio",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp,
+                                    color = Color.White
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = Color(0xFF8B5CF6).copy(alpha = 0.25f),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF8B5CF6).copy(alpha = 0.5f))
+                                ) {
+                                    Text(
+                                        text = "2 Hosts",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFC4B5FD),
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                            Text(
+                                text = "Turn any study topic into an organic conversation between Leo & Maya.",
+                                fontSize = 12.sp,
+                                color = Color(0xFFA1A1AA),
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF8B5CF6)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Filled.Headphones,
+                                contentDescription = "Cast",
+                                tint = Color.White,
                                 modifier = Modifier.size(22.dp)
                             )
                         }

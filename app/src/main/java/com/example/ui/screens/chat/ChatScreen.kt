@@ -1,6 +1,27 @@
 package com.example.ui.screens.chat
 
 import android.net.Uri
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
+import com.example.data.api.QuickerAiMode
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.School
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -28,14 +49,17 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -55,6 +79,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Forward
 import androidx.compose.material.icons.filled.Groups
@@ -63,14 +88,19 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NoteAdd
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Quiz
 import androidx.compose.material.icons.filled.Reply
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.ui.text.style.TextAlign
+import com.example.ui.components.QuicksRichText
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -184,15 +214,19 @@ fun WhatsAppChatsListView(
     var isSearchActive by remember { mutableStateOf(false) }
     var selectedFilter by remember { mutableStateOf("All") } // "All", "Unread", "Groups", "AI"
     var showNewChatDialog by remember { mutableStateOf(false) }
+    var showAiMemoryDialog by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
+
+    val quickerAiChannels = channels.filter { it.serverName == "Quicker AI" || it.id.startsWith("quicker_ai") || it.id == "quicker_ai" }
 
     val filteredChannels = channels.filter { channel ->
         val matchesSearch = channel.displayName.contains(searchQuery, ignoreCase = true) ||
                 channel.lastMessage.contains(searchQuery, ignoreCase = true)
+        val isAiChannel = channel.serverName == "Quicker AI" || channel.id == "quicker_ai" || channel.id.startsWith("quicker_ai")
         val matchesFilter = when (selectedFilter) {
             "Unread" -> channel.unreadCount > 0
-            "Groups" -> !channel.isDirectMessage
-            "AI" -> channel.id == "quicker_ai"
+            "Groups" -> !channel.isDirectMessage && !isAiChannel
+            "AI" -> isAiChannel
             else -> true
         }
         matchesSearch && matchesFilter
@@ -206,7 +240,9 @@ fun WhatsAppChatsListView(
         Column(modifier = Modifier.fillMaxSize()) {
             // WhatsApp Header Bar
             Surface(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding(),
                 color = MaterialTheme.colorScheme.surface,
                 shadowElevation = 2.dp
             ) {
@@ -363,16 +399,219 @@ fun WhatsAppChatsListView(
                     .fillMaxSize()
                     .padding(bottom = 76.dp)
             ) {
+                // Quicker AI Sessions Hub Header
+                if (searchQuery.isBlank() && (selectedFilter == "All" || selectedFilter == "AI")) {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 10.dp, bottom = 4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.AutoAwesome,
+                                        contentDescription = null,
+                                        tint = Color(0xFF8B5CF6),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Quicker AI Sessions (${quickerAiChannels.size})",
+                                        fontSize = 12.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(
+                                        text = "🧠 Memory",
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF8B5CF6),
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .clickable { showAiMemoryDialog = true }
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                    Text(
+                                        text = "+ New AI Chat",
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .clickable { showNewChatDialog = true }
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Horizontal list of Quicker AI sessions
+                            LazyRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentPadding = PaddingValues(horizontal = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                // Action Card: + New Session
+                                item {
+                                    Surface(
+                                        modifier = Modifier
+                                            .width(110.dp)
+                                            .height(80.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                                            .clickable { showNewChatDialog = true },
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.fillMaxSize().padding(8.dp),
+                                            verticalArrangement = Arrangement.Center,
+                                            horizontalAlignment = Alignment.CenterHorizontally
+                                        ) {
+                                            Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text("New AI Chat", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                        }
+                                    }
+                                }
+
+                                // Each Quicker AI Chat Channel
+                                items(quickerAiChannels, key = { it.id }) { aiChannel ->
+                                    Surface(
+                                        modifier = Modifier
+                                            .width(140.dp)
+                                            .height(80.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .border(1.dp, Color(0xFF8B5CF6).copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                                            .clickable { onSelectChannel(aiChannel) },
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.fillMaxSize().padding(8.dp),
+                                            verticalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(20.dp)
+                                                        .clip(CircleShape)
+                                                        .background(Color(0xFF8B5CF6)),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
+                                                }
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = aiChannel.displayName,
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                            Text(
+                                                text = aiChannel.lastMessage.take(40),
+                                                fontSize = 10.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis,
+                                                lineHeight = 13.sp
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+                            HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                        }
+                    }
+                }
+
                 items(filteredChannels, key = { it.id }) { channel ->
                     WhatsAppChatListItem(
                         channel = channel,
-                        onClick = { onSelectChannel(channel) }
+                        onClick = { onSelectChannel(channel) },
+                        onDelete = { viewModel.deleteConversation(channel.id) }
                     )
                     HorizontalDivider(
                         modifier = Modifier.padding(start = 76.dp, end = 16.dp),
                         thickness = 0.5.dp,
                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
                     )
+                }
+
+                // Friendly card to add peer contacts if user only has Quicker AI
+                val hasOtherPeople = channels.any { it.id != "quicker_ai" }
+                if (!hasOtherPeople && searchQuery.isBlank() && selectedFilter == "All") {
+                    item {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 16.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(20.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF25D366).copy(alpha = 0.15f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.PersonAdd,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(24.dp),
+                                        tint = Color(0xFF25D366)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Text(
+                                    text = "Connect with Study Buddies",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Add your classmates or create a study group to share notes, flashcards, and collaborate.",
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                    lineHeight = 18.sp
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Button(
+                                    onClick = { showNewChatDialog = true },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366)),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color.White)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Add Person / Group", color = Color.White, fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+                        }
+                    }
                 }
 
                 if (filteredChannels.isEmpty()) {
@@ -416,52 +655,127 @@ fun WhatsAppChatsListView(
         }
     }
 
-    // New Chat / Group Creation Dialog
+    // New Chat / Group / Quicker AI Creation Dialog
     if (showNewChatDialog) {
+        var chatMode by remember { mutableStateOf("AI") } // "AI", "DIRECT", "GROUP"
         var chatName by remember { mutableStateOf("") }
-        var isGroup by remember { mutableStateOf(false) }
+        var starterMessage by remember { mutableStateOf("") }
 
         AlertDialog(
             onDismissRequest = { showNewChatDialog = false },
-            title = { Text(if (isGroup) "Create Study Group" else "Start New Chat", fontWeight = FontWeight.Bold) },
+            title = {
+                Text(
+                    when (chatMode) {
+                        "AI" -> "New Quicker AI Study Session"
+                        "GROUP" -> "Create Study Group"
+                        else -> "Add Person to Chat"
+                    },
+                    fontWeight = FontWeight.Bold
+                )
+            },
             text = {
                 Column {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
+                        // Segment 1: Quicker AI
                         Button(
-                            onClick = { isGroup = false },
+                            onClick = { chatMode = "AI" },
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (!isGroup) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                                contentColor = if (!isGroup) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                                containerColor = if (chatMode == "AI") Color(0xFF8B5CF6) else MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = if (chatMode == "AI") Color.White else MaterialTheme.colorScheme.onSurface
                             ),
                             shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
                         ) {
-                            Text("Direct Chat", fontSize = 12.sp)
+                            Text("Quicker AI", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
                         }
+
+                        // Segment 2: Direct Contact
                         Button(
-                            onClick = { isGroup = true },
+                            onClick = { chatMode = "DIRECT" },
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isGroup) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                                contentColor = if (isGroup) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                                containerColor = if (chatMode == "DIRECT") Color(0xFF25D366) else MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = if (chatMode == "DIRECT") Color.White else MaterialTheme.colorScheme.onSurface
                             ),
                             shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
                         ) {
-                            Text("Study Group", fontSize = 12.sp)
+                            Text("Direct", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        // Segment 3: Study Group
+                        Button(
+                            onClick = { chatMode = "GROUP" },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (chatMode == "GROUP") Color(0xFF3B82F6) else MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = if (chatMode == "GROUP") Color.White else MaterialTheme.colorScheme.onSurface
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
+                        ) {
+                            Text("Group", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
                     Spacer(modifier = Modifier.height(14.dp))
 
+                    if (chatMode == "AI") {
+                        Text(
+                            text = "Launch a dedicated study chat with Quicker AI for a subject or exam. AI context and memory are preserved.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 16.sp
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                    }
+
                     OutlinedTextField(
                         value = chatName,
                         onValueChange = { chatName = it },
-                        label = { Text(if (isGroup) "Group Name" else "Peer Name") },
-                        placeholder = { Text(if (isGroup) "e.g. Physics 301 Cohort" else "e.g. Elena Rostova") },
+                        label = {
+                            Text(
+                                when (chatMode) {
+                                    "AI" -> "Study Topic / Subject (e.g. Physics, Calculus)"
+                                    "GROUP" -> "Group Name"
+                                    else -> "Contact / Friend Name"
+                                }
+                            )
+                        },
+                        placeholder = {
+                            Text(
+                                when (chatMode) {
+                                    "AI" -> "e.g. Organic Chemistry Final Prep"
+                                    "GROUP" -> "e.g. AP Chemistry Cohort"
+                                    else -> "e.g. Jordan Miller"
+                                }
+                            )
+                        },
                         singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    OutlinedTextField(
+                        value = starterMessage,
+                        onValueChange = { starterMessage = it },
+                        label = { Text(if (chatMode == "AI") "Opening Question / Prompt (Optional)" else "Initial Message (Optional)") },
+                        placeholder = {
+                            Text(
+                                when (chatMode) {
+                                    "AI" -> "e.g. Can you explain the main concepts and quiz me?"
+                                    "GROUP" -> "Welcome everyone to the study group!"
+                                    else -> "Hey! Let's lock in and study."
+                                }
+                            )
+                        },
+                        singleLine = false,
+                        maxLines = 3,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -469,17 +783,42 @@ fun WhatsAppChatsListView(
             confirmButton = {
                 Button(
                     onClick = {
-                        if (chatName.isNotBlank()) {
-                            viewModel.createNewChat(
-                                name = chatName.trim(),
-                                isDirect = !isGroup,
-                                serverName = if (isGroup) "Study Squad" else null
-                            )
-                            showNewChatDialog = false
+                        val trimmedName = chatName.trim().ifBlank { if (chatMode == "AI") "Study Session" else "New Chat" }
+                        when (chatMode) {
+                            "AI" -> {
+                                viewModel.createQuickerAiChat(
+                                    topic = trimmedName,
+                                    initialPrompt = starterMessage.trim().takeIf { it.isNotBlank() }
+                                )
+                            }
+                            "GROUP" -> {
+                                viewModel.createNewChat(
+                                    name = trimmedName,
+                                    isDirect = false,
+                                    serverName = "Study Squad",
+                                    initialMessage = starterMessage.trim().takeIf { it.isNotBlank() }
+                                )
+                            }
+                            else -> {
+                                viewModel.createNewChat(
+                                    name = trimmedName,
+                                    isDirect = true,
+                                    serverName = null,
+                                    initialMessage = starterMessage.trim().takeIf { it.isNotBlank() }
+                                )
+                            }
                         }
-                    }
+                        showNewChatDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = when (chatMode) {
+                            "AI" -> Color(0xFF8B5CF6)
+                            "GROUP" -> Color(0xFF3B82F6)
+                            else -> Color(0xFF25D366)
+                        }
+                    )
                 ) {
-                    Text("Start")
+                    Text(if (chatMode == "AI") "Launch AI Chat" else "Start Chat", color = Color.White)
                 }
             },
             dismissButton = {
@@ -487,6 +826,13 @@ fun WhatsAppChatsListView(
                     Text("Cancel")
                 }
             }
+        )
+    }
+
+    if (showAiMemoryDialog) {
+        AiMemoryDialog(
+            viewModel = viewModel,
+            onDismiss = { showAiMemoryDialog = false }
         )
     }
 }
@@ -497,8 +843,10 @@ fun WhatsAppChatsListView(
 @Composable
 fun WhatsAppChatListItem(
     channel: ChatChannel,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onDelete: (() -> Unit)? = null
 ) {
+    var showDeleteConfirm by remember { mutableStateOf(false) }
     val dateFormat = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
     val dayFormat = remember { SimpleDateFormat("M/d/yy", Locale.getDefault()) }
 
@@ -644,12 +992,52 @@ fun WhatsAppChatListItem(
                 Spacer(modifier = Modifier.height(20.dp))
             }
         }
+
+        // Delete action for peer/custom channels
+        if (channel.id != "quicker_ai" && onDelete != null) {
+            IconButton(
+                onClick = { showDeleteConfirm = true },
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "Delete Chat",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+    }
+
+    if (showDeleteConfirm && onDelete != null) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete Conversation?", fontWeight = FontWeight.Bold) },
+            text = { Text("Are you sure you want to remove \"${channel.displayName}\"? This conversation will be removed from your chat list.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteConfirm = false
+                        onDelete()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.onError)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
 // -------------------------------------------------------------
 // 2. Conversation Detail View ("click on messages and type")
 // -------------------------------------------------------------
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun ConversationDetailView(
     viewModel: QuicksViewModel,
@@ -661,6 +1049,19 @@ fun ConversationDetailView(
     val context = LocalContext.current
     val listState = rememberLazyListState()
     val isAiLoading by viewModel.isAiLoading.collectAsState()
+    val currentAiMode by viewModel.quickerAiMode.collectAsState()
+    val isVoiceListening by viewModel.voiceHelper.isListening.collectAsState()
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+    val coroutineScope = rememberCoroutineScope()
+
+    val isQuickerAi = activeChannel.serverName == "Quicker AI" || activeChannel.id == "quicker_ai" || activeChannel.id.startsWith("quicker_ai")
+    var showAiMemoryDialog by remember { mutableStateOf(false) }
+    var showSwitchAiDialog by remember { mutableStateOf(false) }
+    var showAiMoreMenu by remember { mutableStateOf(false) }
+    var showAttachmentMenu by remember { mutableStateOf(false) }
+    var speechNotice by remember { mutableStateOf<String?>(null) }
+
+    val quickerAiSessions = channels.filter { it.serverName == "Quicker AI" || it.id == "quicker_ai" || it.id.startsWith("quicker_ai") }
 
     var inputText by remember { mutableStateOf("") }
     var selectedImageUri by remember { mutableStateOf<String?>(null) }
@@ -676,10 +1077,47 @@ fun ConversationDetailView(
         onResult = { uri -> selectedImageUri = uri?.toString() }
     )
 
-    // Scroll to bottom when messages arrive
-    LaunchedEffect(messages.size) {
+    // Document / PDF Picker (Stores locally and extracts source text for AI)
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+        onResult = { uri ->
+            if (uri != null) {
+                viewModel.sendSourceAttachment(activeChannel.id, uri, inputText)
+                inputText = ""
+            }
+        }
+    )
+
+    // Audio recording permission launcher
+    val recordAudioLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+        onResult = { isGranted ->
+            if (isGranted) {
+                speechNotice = "Listening... Speak your question now"
+                viewModel.voiceHelper.startSpeechToText(
+                    onText = { text ->
+                        speechNotice = null
+                        inputText = if (inputText.isBlank()) text else "$inputText $text"
+                    },
+                    onError = { err ->
+                        speechNotice = err
+                    }
+                )
+            } else {
+                speechNotice = "Microphone permission is required for voice input"
+            }
+        }
+    )
+
+    val imeVisible = WindowInsets.isImeVisible
+
+    // Keyboard Auto-Adjustment & Auto-scroll when messages arrive or keyboard opens
+    LaunchedEffect(messages.size, imeVisible) {
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(messages.size - 1)
+        }
+        if (imeVisible) {
+            bringIntoViewRequester.bringIntoView()
         }
     }
 
@@ -691,7 +1129,9 @@ fun ConversationDetailView(
     ) {
         // WhatsApp Style Top App Bar
         Surface(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding(),
             color = MaterialTheme.colorScheme.surface,
             shadowElevation = 2.dp
         ) {
@@ -718,14 +1158,14 @@ fun ConversationDetailView(
                         .size(38.dp)
                         .clip(CircleShape)
                         .background(
-                            if (activeChannel.id == "quicker_ai") MaterialTheme.colorScheme.primary
+                            if (isQuickerAi) Color(0xFF8B5CF6)
                             else if (!activeChannel.isDirectMessage) Color(0xFF3B82F6)
                             else Color(0xFF10B981)
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (activeChannel.id == "quicker_ai") {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(20.dp))
+                    if (isQuickerAi) {
+                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
                     } else if (!activeChannel.isDirectMessage) {
                         Icon(Icons.Default.Groups, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
                     } else {
@@ -750,21 +1190,258 @@ fun ConversationDetailView(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    val remainingQuota = viewModel.aiService.getRemainingFreeQuota()
+                    val hasKey = viewModel.aiService.hasCustomKey()
+                    val statusText = if (isQuickerAi) {
+                        if (hasKey) "Quicker AI • Context & Memory Active" else "Quicker AI • $remainingQuota/5 free daily queries"
+                    } else if (activeChannel.isDirectMessage) "Online • Study Buddy"
+                    else "Study Group • ${messages.size} messages"
+
                     Text(
-                        text = if (activeChannel.id == "quicker_ai") "Quicker AI • Ready to help"
-                        else if (activeChannel.isDirectMessage) "Online • WhatsApp Sync"
-                        else "Study Cohort • ${messages.size} messages",
+                        text = statusText,
                         fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (isQuickerAi) Color(0xFF8B5CF6) else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
-                // Call icons
-                IconButton(onClick = {}, modifier = Modifier.size(34.dp)) {
-                    Icon(Icons.Default.Videocam, contentDescription = "Video Call", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                if (isQuickerAi) {
+                    // Memory Button
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFF8B5CF6).copy(alpha = 0.15f),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { showAiMemoryDialog = true }
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text("🧠", fontSize = 12.sp)
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text("Memory", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF8B5CF6))
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    // More Options Dropdown
+                    Box {
+                        IconButton(onClick = { showAiMoreMenu = true }, modifier = Modifier.size(34.dp)) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "AI Options", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+
+                        DropdownMenu(
+                            expanded = showAiMoreMenu,
+                            onDismissRequest = { showAiMoreMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Switch AI Session (${quickerAiSessions.size})") },
+                                onClick = {
+                                    showAiMoreMenu = false
+                                    showSwitchAiDialog = true
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("+ New Quicker AI Session") },
+                                onClick = {
+                                    showAiMoreMenu = false
+                                    viewModel.createQuickerAiChat("Practice Session")
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("🧠 Manage AI Memory") },
+                                onClick = {
+                                    showAiMoreMenu = false
+                                    showAiMemoryDialog = true
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("🎯 Practice Quiz") },
+                                onClick = {
+                                    showAiMoreMenu = false
+                                    viewModel.requestAiQuiz("Current Topic", activeChannel.id)
+                                }
+                            )
+                        }
+                    }
+                } else {
+                    // Call icons for user chats
+                    IconButton(onClick = {}, modifier = Modifier.size(34.dp)) {
+                        Icon(Icons.Default.Videocam, contentDescription = "Video Call", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                    }
+                    IconButton(onClick = {}, modifier = Modifier.size(34.dp)) {
+                        Icon(Icons.Default.Call, contentDescription = "Voice Call", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                    }
                 }
-                IconButton(onClick = {}, modifier = Modifier.size(34.dp)) {
-                    Icon(Icons.Default.Call, contentDescription = "Voice Call", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+            }
+        }
+
+        // Quicker AI Mode Switcher (Smart vs Expert)
+        if (isQuickerAi) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 1.dp
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF101018).copy(alpha = 0.85f))
+                            .border(1.dp, Color(0x30FFFFFF), RoundedCornerShape(12.dp))
+                            .padding(3.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        val isSmart = currentAiMode == QuickerAiMode.SMART
+                        val smartBg by animateColorAsState(
+                            targetValue = if (isSmart) MaterialTheme.colorScheme.primary else Color.Transparent,
+                            label = "smart_bg"
+                        )
+                        val smartTextColor by animateColorAsState(
+                            targetValue = if (isSmart) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            label = "smart_txt"
+                        )
+
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(9.dp))
+                                .clickable { viewModel.setQuickerAiMode(QuickerAiMode.SMART) },
+                            color = smartBg,
+                            shape = RoundedCornerShape(9.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(vertical = 7.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("⚡", fontSize = 12.sp)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    "Smart",
+                                    fontWeight = if (isSmart) FontWeight.Bold else FontWeight.Medium,
+                                    fontSize = 12.sp,
+                                    color = smartTextColor
+                                )
+                            }
+                        }
+
+                        val isExpert = currentAiMode == QuickerAiMode.EXPERT
+                        val expertBg by animateColorAsState(
+                            targetValue = if (isExpert) Color(0xFF8B5CF6) else Color.Transparent,
+                            label = "expert_bg"
+                        )
+                        val expertTextColor by animateColorAsState(
+                            targetValue = if (isExpert) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                            label = "expert_txt"
+                        )
+
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(9.dp))
+                                .clickable { viewModel.setQuickerAiMode(QuickerAiMode.EXPERT) },
+                            color = expertBg,
+                            shape = RoundedCornerShape(9.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(vertical = 7.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("🎓", fontSize = 12.sp)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    "Expert",
+                                    fontWeight = if (isExpert) FontWeight.Bold else FontWeight.Medium,
+                                    fontSize = 12.sp,
+                                    color = expertTextColor
+                                )
+                            }
+                        }
+
+                        val isMaster = currentAiMode == QuickerAiMode.MASTER
+                        val masterBg by animateColorAsState(
+                            targetValue = if (isMaster) Color(0xFFF59E0B) else Color.Transparent,
+                            label = "master_bg"
+                        )
+                        val masterTextColor by animateColorAsState(
+                            targetValue = if (isMaster) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant,
+                            label = "master_txt"
+                        )
+
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(9.dp))
+                                .clickable { viewModel.setQuickerAiMode(QuickerAiMode.MASTER) },
+                            color = masterBg,
+                            shape = RoundedCornerShape(9.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(vertical = 7.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("👑", fontSize = 12.sp)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    "Master",
+                                    fontWeight = if (isMaster) FontWeight.Bold else FontWeight.Medium,
+                                    fontSize = 12.sp,
+                                    color = masterTextColor
+                                )
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp, start = 4.dp, end = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = when (currentAiMode) {
+                                QuickerAiMode.SMART -> "⚡ Smart: Quick answers & intuition"
+                                QuickerAiMode.EXPERT -> "🎓 Expert: Formulas & hard processes"
+                                QuickerAiMode.MASTER -> "👑 Master: Hardest of the toughest tasks"
+                            },
+                            fontSize = 11.sp,
+                            color = when (currentAiMode) {
+                                QuickerAiMode.SMART -> MaterialTheme.colorScheme.primary
+                                QuickerAiMode.EXPERT -> Color(0xFF8B5CF6)
+                                QuickerAiMode.MASTER -> Color(0xFFF59E0B)
+                            },
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.Lock,
+                                contentDescription = "Encrypted",
+                                tint = Color(0xFF10B981),
+                                modifier = Modifier.size(11.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = "Encrypted • Protected",
+                                fontSize = 10.sp,
+                                color = Color(0xFF10B981),
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -795,7 +1472,7 @@ fun ConversationDetailView(
                     )
                 }
 
-                if (isAiLoading && activeChannel.id == "quicker_ai") {
+                if (isAiLoading && isQuickerAi) {
                     item {
                         TypingIndicatorBubble()
                     }
@@ -873,8 +1550,8 @@ fun ConversationDetailView(
             }
         }
 
-        // Quicker AI Action Tools (when chatting with Quicker AI)
-        if (activeChannel.id == "quicker_ai") {
+        // Quicker AI Action Tools (when chatting with any Quicker AI session)
+        if (isQuickerAi) {
             LazyRow(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -882,6 +1559,38 @@ fun ConversationDetailView(
                     .padding(horizontal = 12.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFF8B5CF6).copy(alpha = 0.15f))
+                            .clickable { showAiMemoryDialog = true }
+                            .padding(horizontal = 8.dp, vertical = 5.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("🧠", fontSize = 11.sp)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("AI Memory", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF8B5CF6))
+                        }
+                    }
+                }
+
+                item {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .clickable { showSwitchAiDialog = true }
+                            .padding(horizontal = 8.dp, vertical = 5.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(12.dp), tint = Color(0xFF8B5CF6))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Switch Chat (${quickerAiSessions.size})", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+
                 item {
                     // Hint Mode Toggle
                     Box(
@@ -914,7 +1623,7 @@ fun ConversationDetailView(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .clickable { viewModel.requestAiQuiz("Physics Mechanics") }
+                            .clickable { viewModel.requestAiQuiz("Physics Mechanics", activeChannel.id) }
                             .padding(horizontal = 8.dp, vertical = 5.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -932,10 +1641,10 @@ fun ConversationDetailView(
                             .background(MaterialTheme.colorScheme.surfaceVariant)
                             .clickable {
                                 if (inputText.isNotBlank()) {
-                                    viewModel.requestAiSummary(inputText)
+                                    viewModel.requestAiSummary(inputText, activeChannel.id)
                                     inputText = ""
                                 } else {
-                                    viewModel.requestAiSummary("Wave Particle Duality")
+                                    viewModel.requestAiSummary("Wave Particle Duality", activeChannel.id)
                                 }
                             }
                             .padding(horizontal = 8.dp, vertical = 5.dp)
@@ -955,7 +1664,7 @@ fun ConversationDetailView(
                             .background(MaterialTheme.colorScheme.surfaceVariant)
                             .clickable {
                                 val textToTranslate = if (inputText.isNotBlank()) inputText else "Conservation of Energy"
-                                viewModel.requestAiTranslation(textToTranslate, "Spanish")
+                                viewModel.requestAiTranslation(textToTranslate, "Spanish", activeChannel.id)
                                 inputText = ""
                             }
                             .padding(horizontal = 8.dp, vertical = 5.dp)
@@ -970,61 +1679,229 @@ fun ConversationDetailView(
             }
         }
 
-        // WhatsApp Style Message Input Bar
+        // Listening or Speech Status Banner
+        if (isVoiceListening || speechNotice != null) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = if (isVoiceListening) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        if (isVoiceListening) Icons.Default.Mic else Icons.Default.Lightbulb,
+                        contentDescription = null,
+                        tint = if (isVoiceListening) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = speechNotice ?: "Listening to your voice... Speak your question",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = if (isVoiceListening) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (isVoiceListening) {
+                        IconButton(
+                            onClick = {
+                                viewModel.voiceHelper.stopListening()
+                                speechNotice = null
+                            },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(Icons.Default.Stop, contentDescription = "Stop Listening", tint = MaterialTheme.colorScheme.primary)
+                        }
+                    } else {
+                        IconButton(
+                            onClick = { speechNotice = null },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = "Dismiss", modifier = Modifier.size(14.dp))
+                        }
+                    }
+                }
+            }
+        }
+
+        // WhatsApp Style Message Input Bar with Keyboard Auto-Adjustment
         Surface(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .bringIntoViewRequester(bringIntoViewRequester),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 4.dp
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Photo Attachment Picker
-                IconButton(
-                    onClick = {
-                        photoPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                    },
-                    modifier = Modifier.size(40.dp)
-                ) {
-                    Icon(
-                        Icons.Default.AddPhotoAlternate,
-                        contentDescription = "Attach Photo",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                // Attachment Button with Dropdown (PDF / Files Source + Device Photos)
+                Box {
+                    IconButton(
+                        onClick = { showAttachmentMenu = true },
+                        modifier = Modifier.size(38.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.AttachFile,
+                            contentDescription = "Attach Document or Photo",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
+                    DropdownMenu(
+                        expanded = showAttachmentMenu,
+                        onDismissRequest = { showAttachmentMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.PictureAsPdf,
+                                        contentDescription = null,
+                                        tint = Color(0xFFEF4444),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text("Attach PDF / Doc (AI Source)", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                        Text("Extracts content as knowledge source", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            },
+                            onClick = {
+                                showAttachmentMenu = false
+                                filePickerLauncher.launch(arrayOf("application/pdf", "text/plain", "text/*", "*/*"))
+                            }
+                        )
+
+                        DropdownMenuItem(
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.AddPhotoAlternate,
+                                        contentDescription = null,
+                                        tint = Color(0xFF3B82F6),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text("Attach Image (Device Only)", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                        Text("Stored on device, not cloud", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            },
+                            onClick = {
+                                showAttachmentMenu = false
+                                photoPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            }
+                        )
+                    }
                 }
 
-                Spacer(modifier = Modifier.width(4.dp))
+                Spacer(modifier = Modifier.width(2.dp))
 
-                // Text Input Field ("where you can click on messages and type")
+                // Text Input Field with Auto-Focus and Keyboard Alignment
                 OutlinedTextField(
                     value = inputText,
                     onValueChange = { inputText = it },
                     placeholder = {
                         Text(
-                            if (activeChannel.id == "quicker_ai") "Ask Quicker AI or send notes..." else "Message...",
+                            if (activeChannel.id == "quicker_ai") "Ask Quicker AI (${currentAiMode.name.lowercase()})..." else "Encrypted message...",
                             fontSize = 13.5.sp
                         )
                     },
                     modifier = Modifier
                         .weight(1f)
+                        .bringIntoViewRequester(bringIntoViewRequester)
                         .testTag("chat_message_input"),
                     maxLines = 4,
                     shape = RoundedCornerShape(22.dp),
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Sentences,
+                        imeAction = ImeAction.Send
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onSend = {
+                            if (inputText.isNotBlank() || selectedImageUri != null) {
+                                viewModel.sendChatMessage(
+                                    convoId = activeChannel.id,
+                                    text = inputText,
+                                    imageUri = selectedImageUri,
+                                    replyToText = replyingToMessage?.text,
+                                    isHintRequested = isHintModeActive
+                                )
+                                inputText = ""
+                                selectedImageUri = null
+                                replyingToMessage = null
+                            }
+                        }
+                    ),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = MaterialTheme.colorScheme.primary,
                         unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
                     )
                 )
 
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(4.dp))
 
-                // Send Button with animated morphing between Mic and Send Plane
+                // Real Microphone Speech-to-Text Button
+                val micBgColor by animateColorAsState(
+                    targetValue = if (isVoiceListening) Color(0xFFEF4444) else MaterialTheme.colorScheme.surfaceVariant,
+                    label = "mic_bg"
+                )
+                IconButton(
+                    onClick = {
+                        val hasMicPermission = ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.RECORD_AUDIO
+                        ) == PackageManager.PERMISSION_GRANTED
+
+                        if (hasMicPermission) {
+                            if (isVoiceListening) {
+                                viewModel.voiceHelper.stopListening()
+                                speechNotice = null
+                            } else {
+                                speechNotice = "Listening... Speak now"
+                                viewModel.voiceHelper.startSpeechToText(
+                                    onText = { text ->
+                                        speechNotice = null
+                                        inputText = if (inputText.isBlank()) text else "$inputText $text"
+                                    },
+                                    onError = { err ->
+                                        speechNotice = err
+                                    }
+                                )
+                            }
+                        } else {
+                            recordAudioLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        }
+                    },
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(CircleShape)
+                        .background(micBgColor)
+                ) {
+                    Icon(
+                        imageVector = if (isVoiceListening) Icons.Default.Stop else Icons.Default.Mic,
+                        contentDescription = "Voice Input",
+                        tint = if (isVoiceListening) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(4.dp))
+
+                // Send Button with animated morphing
                 val isTyping = inputText.isNotBlank() || selectedImageUri != null
                 val sendButtonBg by animateColorAsState(
-                    targetValue = if (isTyping) Color(0xFF25D366) else MaterialTheme.colorScheme.primary,
+                    targetValue = if (isTyping) Color(0xFF25D366) else MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
                     label = "send_bg"
                 )
 
@@ -1042,30 +1919,27 @@ fun ConversationDetailView(
                             selectedImageUri = null
                             replyingToMessage = null
                         } else {
-                            // Simulated voice note recording
-                            viewModel.sendChatMessage(
-                                convoId = activeChannel.id,
-                                text = "🎤 Voice Note (0:14) - Study Discussion"
-                            )
+                            // Prompt voice input directly if empty
+                            recordAudioLauncher.launch(Manifest.permission.RECORD_AUDIO)
                         }
                     },
                     modifier = Modifier
-                        .size(44.dp)
+                        .size(42.dp)
                         .clip(CircleShape)
                         .background(sendButtonBg)
                         .testTag("send_chat_button")
                 ) {
                     Icon(
-                        imageVector = if (isTyping) Icons.AutoMirrored.Filled.Send else Icons.Default.Mic,
-                        contentDescription = if (isTyping) "Send" else "Record Voice Note",
+                        imageVector = Icons.AutoMirrored.Filled.Send,
+                        contentDescription = "Send",
                         tint = Color.White,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(19.dp)
                     )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(72.dp))
+        Spacer(modifier = Modifier.height(4.dp))
     }
 
     // Message Click Popup Dialog (Reply, Copy, Forward, Save to Notes)
@@ -1113,6 +1987,98 @@ fun ConversationDetailView(
                 )
                 showForwardDialog = false
                 selectedMessageForOptions = null
+            }
+        )
+    }
+
+    if (showAiMemoryDialog) {
+        AiMemoryDialog(
+            viewModel = viewModel,
+            onDismiss = { showAiMemoryDialog = false }
+        )
+    }
+
+    if (showSwitchAiDialog) {
+        AlertDialog(
+            onDismissRequest = { showSwitchAiDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color(0xFF8B5CF6), modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Quicker AI Sessions", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                }
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "Switch between your study sessions. AI context & memory stay synchronized across sessions.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 16.sp
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 240.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(quickerAiSessions, key = { it.id }) { aiChan ->
+                            val isCurrent = aiChan.id == activeChannel.id
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (isCurrent) Color(0xFF8B5CF6).copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        showSwitchAiDialog = false
+                                        viewModel.openConversation(aiChan.id)
+                                    }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .clip(CircleShape)
+                                            .background(if (isCurrent) Color(0xFF8B5CF6) else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+                                    }
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(aiChan.displayName, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                        Text(aiChan.lastMessage.take(40), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                                    }
+                                    if (isCurrent) {
+                                        Text("Active", fontSize = 11.sp, color = Color(0xFF8B5CF6), fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showSwitchAiDialog = false
+                        viewModel.createQuickerAiChat("New Study Topic")
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B5CF6))
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("+ New Session")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSwitchAiDialog = false }) {
+                    Text("Close")
+                }
             }
         )
     }
@@ -1200,6 +2166,77 @@ fun WhatsAppMessageBubble(
                     )
                 }
 
+                // AI Mode Badge (Smart, Expert or Master)
+                if (message.aiModeUsed != null) {
+                    val badgeColor = when (message.aiModeUsed) {
+                        "Master" -> Color(0xFFF59E0B)
+                        "Expert" -> Color(0xFF8B5CF6)
+                        else -> MaterialTheme.colorScheme.primary
+                    }
+                    val badgeLabel = when (message.aiModeUsed) {
+                        "Master" -> "👑 Master Mode"
+                        "Expert" -> "🎓 Expert Mode"
+                        else -> "⚡ Smart Mode"
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = if (isUser) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.2f) else badgeColor.copy(alpha = 0.15f),
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = badgeLabel,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isUser) MaterialTheme.colorScheme.onPrimary else badgeColor
+                            )
+                        }
+                    }
+                }
+
+                // Attached Document / PDF Source
+                if (message.fileName != null) {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 6.dp)
+                            .clip(RoundedCornerShape(8.dp)),
+                        color = if (isUser) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                if (message.fileType == "pdf") Icons.Default.PictureAsPdf else Icons.Default.Description,
+                                contentDescription = null,
+                                tint = if (message.fileType == "pdf") Color(0xFFEF4444) else MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = message.fileName,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "AI Source • Local Device Only",
+                                    fontSize = 9.5.sp,
+                                    color = if (isUser) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f) else Color(0xFF10B981),
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+                }
+
                 // Attached image if present
                 if (!message.imageUri.isNullOrBlank()) {
                     AsyncImage(
@@ -1214,8 +2251,8 @@ fun WhatsAppMessageBubble(
                     )
                 }
 
-                // Message Text
-                Text(
+                // Message Text with rich markdown, bold, underline, citations support
+                QuicksRichText(
                     text = message.text,
                     fontSize = 14.sp,
                     lineHeight = 19.sp,
@@ -1267,11 +2304,21 @@ fun WhatsAppMessageBubble(
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                // Time and WhatsApp Delivery Checks
+                // Time, Encryption indicator and WhatsApp Delivery Checks
                 Row(
                     modifier = Modifier.align(Alignment.End),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (message.isEncrypted) {
+                        Icon(
+                            Icons.Default.Lock,
+                            contentDescription = "Encrypted Message",
+                            tint = if (isUser) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f) else Color(0xFF10B981),
+                            modifier = Modifier.size(10.dp)
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                    }
+
                     Text(
                         text = formattedTime,
                         fontSize = 10.sp,
@@ -1493,3 +2540,142 @@ fun ForwardMessageDialog(
         }
     )
 }
+
+// -------------------------------------------------------------
+// Quicker AI Memory & Context Modal
+// -------------------------------------------------------------
+@Composable
+fun AiMemoryDialog(
+    viewModel: QuicksViewModel,
+    onDismiss: () -> Unit
+) {
+    val memories by viewModel.aiMemoryManager.memories.collectAsState()
+    var newFact by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.AutoAwesome,
+                    contentDescription = null,
+                    tint = Color(0xFF8B5CF6),
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Quicker AI Memory & Context", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+            }
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Quicker AI uses this persistent memory alongside the recent conversation history to provide personalized answers across all your study sessions.",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 16.sp
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Add new fact row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = newFact,
+                        onValueChange = { newFact = it },
+                        placeholder = { Text("e.g. Taking AP Physics next week", fontSize = 12.sp) },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Button(
+                        onClick = {
+                            if (newFact.isNotBlank()) {
+                                viewModel.aiMemoryManager.addMemory("Study Context", newFact.trim())
+                                newFact = ""
+                            }
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B5CF6)),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Text("Add", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Text(
+                    text = "ACTIVE MEMORIES (${memories.size})",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                if (memories.isEmpty()) {
+                    Text(
+                        text = "No custom memories yet. Add facts like your target grade, preferred explanation style, or subjects you're learning.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 200.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(memories, key = { it.id }) { mem ->
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "• ${mem.key}: ${mem.detail}",
+                                        fontSize = 12.5.sp,
+                                        modifier = Modifier.weight(1f),
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    IconButton(
+                                        onClick = { viewModel.aiMemoryManager.deleteMemory(mem.id) },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = "Delete Memory",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B5CF6))
+            ) {
+                Text("Done")
+            }
+        }
+    )
+}
+

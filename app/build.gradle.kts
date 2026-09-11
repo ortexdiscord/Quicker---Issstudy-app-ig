@@ -113,6 +113,8 @@ dependencies {
   implementation(libs.okhttp)
   // implementation(libs.play.services.location)
   implementation(libs.retrofit)
+  // Bundled ML Kit Text Recognition to ensure offline OCR works without waiting for Google Play Services module download
+  implementation("com.google.mlkit:text-recognition:16.0.1")
   testImplementation(libs.androidx.compose.ui.test.junit4)
   testImplementation(libs.androidx.core)
   testImplementation(libs.androidx.junit)

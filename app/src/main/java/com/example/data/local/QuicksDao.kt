@@ -69,6 +69,12 @@ interface QuicksDao {
     @Query("UPDATE chat_channels SET lastMessage = :lastMessage, lastMessageTime = :time WHERE id = :channelId")
     suspend fun updateLastMessage(channelId: String, lastMessage: String, time: Long)
 
+    @Query("DELETE FROM chat_channels WHERE id = :channelId")
+    suspend fun deleteChannelById(channelId: String)
+
+    @Query("DELETE FROM chat_messages WHERE conversationId = :convoId")
+    suspend fun deleteMessagesByConvoId(convoId: String)
+
     // Study Sessions
     @Query("SELECT * FROM study_sessions ORDER BY timestamp DESC")
     fun getAllStudySessions(): Flow<List<StudySession>>

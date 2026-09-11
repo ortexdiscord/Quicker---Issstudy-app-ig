@@ -76,7 +76,7 @@ enum class AppThemeMode {
 
 @Composable
 fun MyApplicationTheme(
-    themeMode: AppThemeMode = AppThemeMode.SYSTEM,
+    themeMode: AppThemeMode = AppThemeMode.OLED_BLACK,
     content: @Composable () -> Unit,
 ) {
     val isSystemDark = isSystemInDarkTheme()
@@ -84,7 +84,7 @@ fun MyApplicationTheme(
         AppThemeMode.LIGHT -> MinimalistLightColorScheme
         AppThemeMode.DARK -> MinimalistDarkColorScheme
         AppThemeMode.OLED_BLACK -> MinimalistOledColorScheme
-        AppThemeMode.SYSTEM -> if (isSystemDark) MinimalistDarkColorScheme else MinimalistLightColorScheme
+        AppThemeMode.SYSTEM -> if (isSystemDark) MinimalistOledColorScheme else MinimalistLightColorScheme
     }
 
     MaterialTheme(

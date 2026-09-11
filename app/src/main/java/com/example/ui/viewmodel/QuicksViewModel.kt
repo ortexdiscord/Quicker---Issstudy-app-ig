@@ -12,6 +12,10 @@ import com.example.data.firebase.FirebaseManager
 import com.example.audio.LofiAudioEngine
 import com.example.data.api.AiService
 import com.example.data.api.QuizResult
+import com.example.data.api.QuickerAiMode
+import com.example.data.security.EncryptionHelper
+import com.example.data.storage.LocalAttachmentManager
+import android.net.Uri
 import com.example.data.local.CalendarEvent
 import com.example.data.local.ChatChannel
 import com.example.data.local.ChatMessage
@@ -43,7 +47,8 @@ enum class QuicksNavTab {
     CALENDAR,
     LOCK_IN,
     NOTES,
-    CHAT
+    CHAT,
+    PODCAST
 }
 
 enum class SettingsTab {
@@ -65,6 +70,17 @@ class QuicksViewModel(application: Application) : AndroidViewModel(application) 
     val voiceHelper = VoiceCommandHelper(application)
     val codeVerificationManager = CodeVerificationManager(application)
     val firebaseManager = FirebaseManager(application)
+    val textRecognitionEngine = com.example.data.ocr.TextRecognitionEngine(application)
+    val localAttachmentManager = LocalAttachmentManager(application)
+    val aiMemoryManager = com.example.data.ai.AiMemoryManager(application)
+    val podcastManager = com.example.podcast.PodcastManager(application)
+
+    private val _quickerAiMode = MutableStateFlow(QuickerAiMode.SMART)
+    val quickerAiMode: StateFlow<QuickerAiMode> = _quickerAiMode.asStateFlow()
+
+    fun setQuickerAiMode(mode: QuickerAiMode) {
+        _quickerAiMode.value = mode
+    }
 
     val cloudSyncState: StateFlow<CloudSyncState> = firebaseManager.syncState
     val firebaseUser = firebaseManager.currentUser
@@ -245,7 +261,9 @@ class QuicksViewModel(application: Application) : AndroidViewModel(application) 
         preset: String,
         imagePath1: String? = null,
         imagePath2: String? = null,
-        dateString: String? = null
+        dateString: String? = null,
+        extractedOcrText: String? = null,
+        aiSummary: String? = null
     ) {
         viewModelScope.launch {
             val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
@@ -258,9 +276,27 @@ class QuicksViewModel(application: Application) : AndroidViewModel(application) 
                     preset = preset,
                     imagePath1 = imagePath1,
                     imagePath2 = imagePath2,
-                    dateString = date
+                    dateString = date,
+                    extractedOcrText = extractedOcrText,
+                    aiSummary = aiSummary
                 )
             )
+        }
+    }
+
+    fun processImageForNote(
+        uri: android.net.Uri,
+        onComplete: (fullText: String, summary: String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val ocrResult = textRecognitionEngine.recognizeTextFromUri(uri)
+            val fullText = ocrResult.fullText
+            val summary = if (ocrResult.isSuccessful && fullText.isNotBlank()) {
+                aiService.summarizeAndSynthesizeNote(fullText, uri.toString())
+            } else {
+                "No clear text detected to summarize."
+            }
+            onComplete(fullText, summary)
         }
     }
 
@@ -388,25 +424,84 @@ class QuicksViewModel(application: Application) : AndroidViewModel(application) 
         messagesJob?.cancel()
         messagesJob = viewModelScope.launch {
             repository.getMessagesForConversation(convoId).collect { msgs ->
-                _activeMessages.value = msgs
+                _activeMessages.value = msgs.map { msg ->
+                    msg.copy(text = EncryptionHelper.decrypt(msg.text))
+                }
             }
         }
     }
 
-    fun createNewChat(name: String, isDirect: Boolean, serverName: String? = null) {
+    fun createNewChat(name: String, isDirect: Boolean, serverName: String? = null, initialMessage: String? = null) {
         viewModelScope.launch {
-            val id = "chat_${System.currentTimeMillis()}"
+            val id = if (isDirect) "dm_${System.currentTimeMillis()}" else "group_${System.currentTimeMillis()}"
             val channel = ChatChannel(
                 id = id,
                 serverName = serverName,
-                channelName = name,
-                displayName = name,
+                channelName = name.trim(),
+                displayName = name.trim(),
                 isDirectMessage = isDirect,
                 avatarName = if (isDirect) "friend_new" else "group_new",
-                lastMessage = "Chat started",
+                lastMessage = initialMessage?.takeIf { it.isNotBlank() } ?: (if (isDirect) "Chat started" else "Study group created"),
                 lastMessageTime = System.currentTimeMillis()
             )
             repository.insertChannel(channel)
+            if (!initialMessage.isNullOrBlank()) {
+                val user = sessionManager.userProfile.value
+                val firstMsg = ChatMessage(
+                    conversationId = id,
+                    senderId = "user",
+                    senderName = user.name,
+                    isFromUser = true,
+                    text = initialMessage.trim(),
+                    timestamp = System.currentTimeMillis()
+                )
+                repository.insertMessage(firstMsg)
+            }
+            openConversation(id)
+        }
+    }
+
+    fun deleteConversation(convoId: String) {
+        viewModelScope.launch {
+            repository.deleteChannel(convoId)
+            if (_activeChatConvoId.value == convoId) {
+                closeConversation()
+            }
+        }
+    }
+
+    fun createQuickerAiChat(topic: String, initialPrompt: String? = null) {
+        viewModelScope.launch {
+            val id = "quicker_ai_${System.currentTimeMillis()}"
+            val title = topic.trim().ifBlank { "Study Session" }
+            val channel = ChatChannel(
+                id = id,
+                serverName = "Quicker AI",
+                channelName = title,
+                displayName = "Quicker AI: $title",
+                isDirectMessage = false,
+                avatarName = "quicker_bot",
+                lastMessage = "Started study session on $title",
+                lastMessageTime = System.currentTimeMillis()
+            )
+            repository.insertChannel(channel)
+
+            val welcomeMsg = ChatMessage(
+                conversationId = id,
+                senderId = "ai",
+                senderName = "Quicker AI",
+                isFromUser = false,
+                text = "Welcome to your dedicated Quicker AI study session on **$title**! I have your learning preferences and context loaded. Feel free to ask questions, share lecture photos, or test yourself with diagnostic quizzes.",
+                timestamp = System.currentTimeMillis()
+            )
+            repository.insertMessage(welcomeMsg)
+
+            if (!initialPrompt.isNullOrBlank()) {
+                sendChatMessage(
+                    convoId = id,
+                    text = initialPrompt
+                )
+            }
             openConversation(id)
         }
     }
@@ -416,7 +511,8 @@ class QuicksViewModel(application: Application) : AndroidViewModel(application) 
         text: String,
         imageUri: String? = null,
         replyToText: String? = null,
-        isHintRequested: Boolean = false
+        isHintRequested: Boolean = false,
+        sources: List<Pair<String, String>> = emptyList()
     ) {
         if (text.isBlank() && imageUri == null) return
 
@@ -425,20 +521,23 @@ class QuicksViewModel(application: Application) : AndroidViewModel(application) 
             val previewText = if (text.isNotBlank()) text else "📷 Photo"
             repository.updateLastMessage(convoId, previewText, System.currentTimeMillis())
 
+            val encryptedText = EncryptionHelper.encrypt(text)
             val userMsg = ChatMessage(
                 conversationId = convoId,
                 senderId = "user",
                 senderName = user.name,
                 isFromUser = true,
-                text = text,
+                text = encryptedText,
                 imageUri = imageUri,
-                replyToText = replyToText
+                replyToText = replyToText,
+                isEncrypted = true,
+                aiModeUsed = _quickerAiMode.value.label
             )
             repository.insertMessage(userMsg)
 
-            // If messaging Quicker AI, trigger AI response
-            if (convoId == "quicker_ai") {
-                triggerQuickerAiResponse(text, imageUri, isHintRequested)
+            // If messaging any Quicker AI chat channel, trigger AI response with context
+            if (convoId == "quicker_ai" || convoId.startsWith("quicker_ai")) {
+                triggerQuickerAiResponse(text, imageUri, isHintRequested, convoId, sources)
             } else {
                 // Friendly simulated peer reply for demo channels
                 delay(1000)
@@ -456,26 +555,70 @@ class QuicksViewModel(application: Application) : AndroidViewModel(application) 
                         senderId = "peer",
                         senderName = if (convoId.contains("sarah")) "Sarah Chen" else if (convoId.contains("yez")) "Yez" else "Alex",
                         isFromUser = false,
-                        text = reply
+                        text = EncryptionHelper.encrypt(reply),
+                        isEncrypted = true
                     )
                 )
             }
         }
     }
 
-    fun requestAiQuiz(topic: String = "Physics") {
+    fun sendSourceAttachment(convoId: String, uri: Uri, userPrompt: String = "") {
+        viewModelScope.launch {
+            _isAiLoading.value = true
+            val result = localAttachmentManager.saveAndProcessLocalAttachment(uri)
+            result.onSuccess { attachment ->
+                val user = sessionManager.userProfile.value
+                val promptText = userPrompt.ifBlank { "Please analyze this attached ${attachment.fileType.uppercase()}: ${attachment.fileName}" }
+
+                val preview = "📎 ${attachment.fileName}"
+                repository.updateLastMessage(convoId, preview, System.currentTimeMillis())
+
+                val encryptedText = EncryptionHelper.encrypt(promptText)
+                val userMsg = ChatMessage(
+                    conversationId = convoId,
+                    senderId = "user",
+                    senderName = user.name,
+                    isFromUser = true,
+                    text = encryptedText,
+                    imageUri = if (attachment.fileType == "image") attachment.localUri else null,
+                    fileUri = attachment.localUri,
+                    fileName = attachment.fileName,
+                    fileType = attachment.fileType,
+                    extractedSourceText = attachment.extractedText,
+                    isEncrypted = true,
+                    aiModeUsed = _quickerAiMode.value.label
+                )
+                repository.insertMessage(userMsg)
+
+                triggerQuickerAiResponse(
+                    prompt = promptText,
+                    imageUri = if (attachment.fileType == "image") attachment.localUri else null,
+                    isHintMode = false,
+                    convoId = convoId,
+                    sources = listOf(Pair(attachment.fileName, attachment.extractedText))
+                )
+            }.onFailure { error ->
+                _isAiLoading.value = false
+            }
+        }
+    }
+
+    fun requestAiQuiz(topic: String = "Physics", targetConvoId: String = "quicker_ai") {
         viewModelScope.launch {
             _isAiLoading.value = true
             val quiz = aiService.generateQuiz(topic)
             _isAiLoading.value = false
 
+            val convo = if (targetConvoId.isNotBlank()) targetConvoId else "quicker_ai"
+            repository.updateLastMessage(convo, "Quiz: ${quiz.question.take(40)}...", System.currentTimeMillis())
             repository.insertMessage(
                 ChatMessage(
-                    conversationId = "quicker_ai",
+                    conversationId = convo,
                     senderId = "ai",
                     senderName = "Quicker AI",
                     isFromUser = false,
-                    text = "Here is a custom quiz question for $topic:",
+                    text = "Here is a diagnostic quiz on $topic:",
                     messageType = "QUIZ",
                     quizQuestion = quiz.question,
                     quizOptions = quiz.options.joinToString(",,,,"),
@@ -492,30 +635,39 @@ class QuicksViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun requestAiSummary(content: String) {
+    fun requestAiSummary(content: String, targetConvoId: String = "quicker_ai") {
         viewModelScope.launch {
-            sendChatMessage("quicker_ai", "Can you summarize this study topic concisely: \"$content\"?")
+            val convo = if (targetConvoId.isNotBlank()) targetConvoId else "quicker_ai"
+            sendChatMessage(convo, "Can you summarize this study topic concisely: \"$content\"?")
         }
     }
 
-    fun requestAiTranslation(text: String, targetLanguage: String = "Spanish") {
+    fun requestAiTranslation(text: String, targetLanguage: String = "Spanish", targetConvoId: String = "quicker_ai") {
         viewModelScope.launch {
-            sendChatMessage("quicker_ai", "Please translate this study phrase into $targetLanguage with academic precision: \"$text\"")
+            val convo = if (targetConvoId.isNotBlank()) targetConvoId else "quicker_ai"
+            sendChatMessage(convo, "Please translate this study phrase into $targetLanguage with academic precision: \"$text\"")
         }
     }
 
-    fun requestAiScheduleAdvice() {
+    fun requestAiScheduleAdvice(targetConvoId: String = "quicker_ai") {
         viewModelScope.launch {
+            val convo = if (targetConvoId.isNotBlank()) targetConvoId else "quicker_ai"
             val upcoming = calendarEvents.value.take(3)
             val scheduleContext = upcoming.joinToString("; ") { "${it.title} at ${it.startTime}" }
             sendChatMessage(
-                "quicker_ai",
+                convo,
                 "Based on my calendar ($scheduleContext), suggest an optimal Lock In study block and add it to my schedule."
             )
         }
     }
 
-    private fun triggerQuickerAiResponse(prompt: String, imageUri: String?, isHintMode: Boolean) {
+    private fun triggerQuickerAiResponse(
+        prompt: String,
+        imageUri: String?,
+        isHintMode: Boolean,
+        convoId: String = "quicker_ai",
+        sources: List<Pair<String, String>> = emptyList()
+    ) {
         viewModelScope.launch {
             _isAiLoading.value = true
             val lower = prompt.lowercase()
@@ -525,18 +677,41 @@ class QuicksViewModel(application: Application) : AndroidViewModel(application) 
                 addCalendarEvent("AI Planned: Deep Focus Study Block", "General", "02:00 PM", "03:30 PM", "Quicks")
             }
 
-            val result = aiService.generateResponse(prompt, imageUri, isHintMode)
+            // Build conversation history from active messages for true memory
+            val history = _activeMessages.value.takeLast(6).map {
+                Pair(if (it.isFromUser) "user" else "model", it.text)
+            }
+
+            // Retrieve personalized memory facts
+            val memoryBlock = aiMemoryManager.getMemorySystemPromptBlock()
+            val systemContext = "You are Quicker AI, an expert, encouraging study companion in the Quicks study app. Keep answers clear, rigorous, and formatted with rich markdown.$memoryBlock"
+
+            val currentMode = _quickerAiMode.value
+            val result = aiService.generateResponse(
+                prompt = prompt,
+                imageUri = imageUri,
+                isHintMode = isHintMode,
+                mode = currentMode,
+                sources = sources,
+                systemContext = systemContext,
+                conversationHistory = history
+            )
             _isAiLoading.value = false
 
             val responseText = result.getOrElse { it.message ?: "Could not complete request." }
+            repository.updateLastMessage(convoId, responseText.take(60), System.currentTimeMillis())
             repository.insertMessage(
                 ChatMessage(
-                    conversationId = "quicker_ai",
+                    conversationId = convoId,
                     senderId = "ai",
                     senderName = "Quicker AI",
                     isFromUser = false,
-                    text = responseText,
-                    messageType = "TEXT"
+                    text = EncryptionHelper.encrypt(responseText),
+                    messageType = "TEXT",
+                    isEncrypted = true,
+                    aiModeUsed = currentMode.label,
+                    fileName = sources.firstOrNull()?.first,
+                    extractedSourceText = sources.firstOrNull()?.second
                 )
             )
         }
@@ -593,5 +768,6 @@ class QuicksViewModel(application: Application) : AndroidViewModel(application) 
         super.onCleared()
         audioEngine.release()
         voiceHelper.stopListening()
+        podcastManager.release()
     }
 }

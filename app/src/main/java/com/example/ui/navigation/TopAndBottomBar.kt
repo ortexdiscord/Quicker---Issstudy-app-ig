@@ -30,17 +30,20 @@ import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LockClock
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Headphones
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.LockClock
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import com.example.ui.components.LiquidGlassPill
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
@@ -50,11 +53,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -159,6 +164,7 @@ fun QuicksBottomPill(
         BottomNavTabItem(QuicksNavTab.CALENDAR, "Calendar", Icons.Filled.CalendarMonth, Icons.Outlined.CalendarMonth),
         BottomNavTabItem(QuicksNavTab.LOCK_IN, "Lock In", Icons.Filled.LockClock, Icons.Outlined.LockClock),
         BottomNavTabItem(QuicksNavTab.NOTES, "Notes", Icons.Filled.Description, Icons.Outlined.Description),
+        BottomNavTabItem(QuicksNavTab.PODCAST, "Cast", Icons.Filled.Headphones, Icons.Outlined.Headphones),
         BottomNavTabItem(QuicksNavTab.CHAT, "Chat", Icons.AutoMirrored.Filled.Chat, Icons.AutoMirrored.Outlined.Chat)
     )
 
@@ -166,48 +172,67 @@ fun QuicksBottomPill(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .padding(horizontal = 10.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center
     ) {
-        Surface(
-            modifier = Modifier
-                .clip(RoundedCornerShape(32.dp))
-                .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f), RoundedCornerShape(32.dp)),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-            shadowElevation = 8.dp
+        LiquidGlassPill(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(32.dp),
+            backgroundColor = Color(0xFF0C0C14),
+            backgroundAlpha = 0.92f
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(58.dp)
-                    .padding(horizontal = 6.dp, vertical = 5.dp),
+                    .height(60.dp)
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 tabs.forEach { item ->
                     val isSelected = currentTab == item.tab
-                    val bgColor by animateColorAsState(
-                        targetValue = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
-                        animationSpec = tween(durationMillis = 200),
-                        label = "pill_bg"
-                    )
+
+                    val bgBrush = if (isSelected) {
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color(0xFF8B5CF6).copy(alpha = 0.85f),
+                                Color(0xFF6D28D9).copy(alpha = 0.95f)
+                            )
+                        )
+                    } else {
+                        Brush.verticalGradient(
+                            colors = listOf(Color.Transparent, Color.Transparent)
+                        )
+                    }
+
                     val contentColor by animateColorAsState(
-                        targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        animationSpec = tween(durationMillis = 200),
+                        targetValue = if (isSelected) Color.White else Color(0xFFA1A1AA),
+                        animationSpec = tween(durationMillis = 220),
                         label = "pill_content"
                     )
                     val scale by animateFloatAsState(
-                        targetValue = if (isSelected) 1.05f else 1.0f,
-                        animationSpec = spring(dampingRatio = 0.7f, stiffness = 400f),
+                        targetValue = if (isSelected) 1.06f else 1.0f,
+                        animationSpec = spring(dampingRatio = 0.65f, stiffness = 420f),
                         label = "tab_scale"
                     )
 
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .height(48.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(bgColor)
+                            .height(50.dp)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(bgBrush)
+                            .border(
+                                width = if (isSelected) 1.dp else 0.dp,
+                                brush = if (isSelected) {
+                                    Brush.verticalGradient(
+                                        colors = listOf(Color(0xC0FFFFFF), Color(0x30FFFFFF))
+                                    )
+                                } else {
+                                    Brush.verticalGradient(listOf(Color.Transparent, Color.Transparent))
+                                },
+                                shape = RoundedCornerShape(18.dp)
+                            )
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = ripple(bounded = true),
